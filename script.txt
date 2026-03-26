@@ -22,7 +22,7 @@ local aimCycleBodyTime = 2
 local aimCycleTimer = 0
 local aimCycleCurrent = "Head"
 local aimFOV = 240
-local aimSmoothness = 0.2
+local aimSmoothness = 0.15
 local currentCameraCFrame = Camera.CFrame
 
 local hitboxEnabled = false
@@ -694,6 +694,9 @@ local function toggleESP()
 end
 
 local aimConnection
+local currentAimTarget = nil
+local currentAimPart = nil
+
 local function startAim()
     if aimConnection then aimConnection:Disconnect() end
     aimConnection = RunService.RenderStepped:Connect(function()
@@ -705,6 +708,7 @@ local function startAim()
         end
         
         local closestPlayer = nil
+        local closestPart = nil
         local closestDistance = math.huge
         local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
         
@@ -719,14 +723,18 @@ local function startAim()
                         if distance <= aimFOV and distance < closestDistance then
                             closestDistance = distance
                             closestPlayer = player
+                            closestPart = targetPart
                         end
                     end
                 end
             end
         end
         
-        if closestPlayer and closestPlayer.Character and closestPlayer.Character:FindFirstChild(currentTarget) then
-            local targetPos = closestPlayer.Character:FindFirstChild(currentTarget).Position
+        if closestPlayer and closestPart then
+            currentAimTarget = closestPlayer
+            currentAimPart = closestPart
+            
+            local targetPos = closestPart.Position
             local cameraPos = Camera.CFrame.Position
             local targetCFrame = CFrame.new(cameraPos, targetPos)
             
@@ -737,6 +745,9 @@ local function startAim()
                 Camera.CFrame = targetCFrame
                 currentCameraCFrame = targetCFrame
             end
+        else
+            currentAimTarget = nil
+            currentAimPart = nil
         end
     end)
 end
@@ -759,6 +770,8 @@ local function toggleAim()
             aimConnection:Disconnect()
             aimConnection = nil
         end
+        currentAimTarget = nil
+        currentAimPart = nil
     end
 end
 
