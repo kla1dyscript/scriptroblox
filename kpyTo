@@ -45,11 +45,17 @@ local flyConn = nil
 local flyVel = nil
 local flyGyro = nil
 
+-- Настройки NoClip
+local noclipEnabled = false
+local noclipKey = "V"
+local noclipConn = nil
+local originalCanCollide = {}
+
 -- Настройки FullBright
 local fullbrightEnabled = false
 local originalLighting = {}
 
--- ESP (упрощенная версия - только подсветка, имя и ХП)
+-- ESP
 local espEnabled = false
 local espColor = Color3.fromRGB(255, 0, 0)
 local espObjects = {}
@@ -101,12 +107,58 @@ local function toggleFullbright()
     end
 end
 
--- ==================== ESP (упрощенная) ====================
+-- ==================== NOCLIP ====================
+local function applyNoClip()
+    if not noclipEnabled then return end
+    local char = LP.Character
+    if not char then return end
+    for _, part in ipairs(char:GetDescendants()) do
+        if part:IsA("BasePart") and part.CanCollide then
+            if not originalCanCollide[part] then
+                originalCanCollide[part] = part.CanCollide
+            end
+            part.CanCollide = false
+        end
+    end
+end
+
+local function restoreCollision()
+    for part, canCollide in pairs(originalCanCollide) do
+        if part and part.Parent then
+            part.CanCollide = canCollide
+        end
+    end
+    originalCanCollide = {}
+end
+
+local function startNoClip()
+    if noclipConn then noclipConn:Disconnect() end
+    noclipConn = RS.Heartbeat:Connect(applyNoClip)
+    applyNoClip()
+end
+
+local function stopNoClip()
+    if noclipConn then
+        noclipConn:Disconnect()
+        noclipConn = nil
+    end
+    restoreCollision()
+end
+
+local function toggleNoClip()
+    noclipEnabled = not noclipEnabled
+    if noclipEnabled then
+        startNoClip()
+    else
+        stopNoClip()
+    end
+end
+
+-- ==================== ESP ====================
 local function updateESPforPlayer(player)
     local espData = espObjects[player]
     if not espData or not player.Character then return end
     
-    -- Подсветка игрока
     if espEnabled then
         if not espData.highlight then
             local highlight = Instance.new("Highlight")
@@ -129,7 +181,6 @@ local function updateESPforPlayer(player)
         espData.highlight = nil
     end
     
-    -- Billboard для имени и ХП
     if espData.billboard then
         if not espData.nameText then
             local nameText = Instance.new("TextLabel")
@@ -1163,10 +1214,47 @@ local function createHitboxSetting(parent, yPos)
     return card
 end
 
+local function createNoClipSetting(parent, yPos)
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(1,0,0,180)
+    card.Position = UDim2.new(0,0,0,yPos)
+    card.BackgroundColor3 = Color3.fromRGB(28,28,38)
+    card.BackgroundTransparency = 0.3
+    card.Parent = parent
+    local cardCorner = Instance.new("UICorner")
+    cardCorner.CornerRadius = UDim.new(0,12)
+    cardCorner.Parent = card
+    local enableBtn = Instance.new("TextButton")
+    enableBtn.Size = UDim2.new(0.3,0,0.2,0)
+    enableBtn.Position = UDim2.new(0.65,0,0.08,0)
+    enableBtn.BackgroundColor3 = Color3.fromRGB(45,45,60)
+    enableBtn.BackgroundTransparency = 0.2
+    enableBtn.Text = "NoClip: ВЫКЛ"
+    enableBtn.TextColor3 = Color3.fromRGB(255,255,255)
+    enableBtn.TextSize = 12
+    enableBtn.Font = Enum.Font.GothamBold
+    enableBtn.Parent = card
+    local enableCorner = Instance.new("UICorner")
+    enableCorner.CornerRadius = UDim.new(0,8)
+    enableCorner.Parent = enableBtn
+    local function update()
+        if noclipEnabled then
+            enableBtn.Text = "NoClip: ВКЛ"
+            enableBtn.BackgroundColor3 = Color3.fromRGB(80,120,255)
+        else
+            enableBtn.Text = "NoClip: ВЫКЛ"
+            enableBtn.BackgroundColor3 = Color3.fromRGB(45,45,60)
+        end
+    end
+    enableBtn.MouseButton1Click:Connect(function() toggleNoClip(); update() end)
+    update()
+    return card
+end
+
 -- ==================== СОЗДАНИЕ UI КОНТЕНТА ====================
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 900, 0, 700)
-mainFrame.Position = UDim2.new(0.5, -450, 0.5, -350)
+mainFrame.Size = UDim2.new(0, 900, 0, 750)
+mainFrame.Position = UDim2.new(0.5, -450, 0.5, -375)
 mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 22)
 mainFrame.BackgroundTransparency = 0.3
 mainFrame.BorderSizePixel = 0
@@ -1385,7 +1473,7 @@ local function updateButtonPositions()
 end
 
 -- ==================== НАПОЛНЕНИЕ ВКЛАДОК ====================
--- Скрипты (с ESP кнопкой)
+-- Скрипты
 local btn1 = Instance.new("TextButton")
 btn1.Size = UDim2.new(1, -20, 0, 50)
 btn1.Position = UDim2.new(0, 10, 0, 10)
@@ -1604,6 +1692,17 @@ createKeybindSetting(settingsContent, yOffset, "ESP", function()
 end, function(key) espKey = key end)
 
 yOffset = yOffset + 85
+createKeybindSetting(settingsContent, yOffset, "NoClip", function() 
+    local name = noclipKey
+    if name == "RightShift" then return "Right Shift"
+    elseif name == "LeftShift" then return "Left Shift"
+    elseif name == "RightControl" then return "Right Ctrl"
+    elseif name == "LeftControl" then return "Left Ctrl"
+    end
+    return name
+end, function(key) noclipKey = key end)
+
+yOffset = yOffset + 85
 createKeybindSetting(settingsContent, yOffset, "Открыть меню", function() 
     local name = menuKey
     if name == "RightShift" then return "Right Shift"
@@ -1693,7 +1792,9 @@ fullbrightBtn.MouseButton1Click:Connect(function()
     end
 end)
 
-miscContent.CanvasSize = UDim2.new(0, 0, 0, 120)
+createNoClipSetting(miscContent, 120)
+
+miscContent.CanvasSize = UDim2.new(0, 0, 0, 310)
 
 -- ==================== ОБРАБОТЧИКИ КНОПОК ====================
 btn1.MouseButton1Click:Connect(function()
@@ -1741,8 +1842,8 @@ local function ShowMenuWithAnimation()
     mainFrame.Visible = true
     mainFrame.Size = UDim2.new(0,0,0,0)
     mainFrame.Position = UDim2.new(0.5,0,0.5,0)
-    local tweenSize = TS:Create(mainFrame, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(0,900,0,700)})
-    local tweenPos = TS:Create(mainFrame, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = UDim2.new(0.5,-450,0.5,-350)})
+    local tweenSize = TS:Create(mainFrame, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(0,900,0,750)})
+    local tweenPos = TS:Create(mainFrame, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = UDim2.new(0.5,-450,0.5,-375)})
     tweenSize:Play()
     tweenPos:Play()
     tweenPos.Completed:Connect(function() isAnim = false end)
@@ -1812,6 +1913,14 @@ UIS.InputBegan:Connect(function(input, gp)
         if flyBtnEnable and flyBtnEnable.Name == "enableBtn" then
             flyBtnEnable.Text = flyEnabled and "Полёт: ВКЛ" or "Полёт: ВЫКЛ"
             flyBtnEnable.BackgroundColor3 = flyEnabled and Color3.fromRGB(80,120,255) or Color3.fromRGB(45,45,60)
+        end
+    end
+    if input.KeyCode.Name == noclipKey then
+        toggleNoClip()
+        local noclipBtnEnable = miscContent:FindFirstChildWhichIsA("TextButton")
+        if noclipBtnEnable and noclipBtnEnable.Name == "enableBtn" then
+            noclipBtnEnable.Text = noclipEnabled and "NoClip: ВКЛ" or "NoClip: ВЫКЛ"
+            noclipBtnEnable.BackgroundColor3 = noclipEnabled and Color3.fromRGB(80,120,255) or Color3.fromRGB(45,45,60)
         end
     end
     if input.KeyCode.Name == menuKey then
